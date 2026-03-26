@@ -1,4 +1,4 @@
-# Lab 7 — Build a Client with an AI Coding Agent
+# Lab 7 1— Build a Client with an AI Coding Agent
 
 [Sync your fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/syncing-a-fork#syncing-a-fork-branch-from-the-command-line) regularly — the lab gets updated.
 
