@@ -14,16 +14,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from handlers import (
+    get_inline_keyboard,
     handle_help,
     handle_health,
     handle_labs,
+    handle_natural_language,
     handle_scores,
     handle_start,
 )
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -65,9 +68,14 @@ def run_test_mode(command: str) -> None:
     """Run the bot in test mode - print response and exit.
 
     Args:
-        command: The command to test (e.g., "/start")
+        command: The command to test (e.g., "/start" or "what labs are available")
     """
-    response = route_command(command)
+    # Check if it's a slash command or natural language
+    if command.strip().startswith("/"):
+        response = route_command(command)
+    else:
+        # Natural language query - use LLM intent router
+        response = handle_natural_language(command)
     print(response)
     sys.exit(0)
 
@@ -89,7 +97,18 @@ async def start_command(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Handle /start command."""
-    await handle_telegram_command(update, context, "/start")
+    args = " ".join(context.args) if context.args else ""
+    response = handle_start(args)
+    
+    # Create inline keyboard
+    keyboard_data = get_inline_keyboard()
+    keyboard = [
+        [InlineKeyboardButton(btn["text"], callback_data=btn["callback_data"]) for btn in row]
+        for row in keyboard_data
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(response, reply_markup=reply_markup)
 
 
 async def help_command(
@@ -128,12 +147,36 @@ async def handle_text_message(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
-    """Handle plain text messages."""
+    """Handle plain text messages using LLM intent routing."""
     text = update.message.text
-    await update.message.reply_text(
-        "I understand commands like /start, /help, /health, /labs, /scores. "
-        "Use /help to see available commands."
-    )
+    # Send typing action while processing
+    await update.message.chat.send_action(action="typing")
+    response = handle_natural_language(text)
+    await update.message.reply_text(response)
+
+
+async def handle_callback(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """Handle inline keyboard button callbacks."""
+    query = update.callback_query
+    await query.answer()
+    
+    callback_data = query.data
+    
+    if callback_data == "cmd_labs":
+        response = handle_labs("")
+    elif callback_data == "cmd_scores":
+        response = "Please specify a lab, e.g., /scores lab-04"
+    elif callback_data == "cmd_top":
+        response = handle_natural_language("Who are the top 5 students in lab 04?")
+    elif callback_data == "cmd_completion":
+        response = handle_natural_language("What is the completion rate for lab 04?")
+    else:
+        response = "Unknown action."
+    
+    await query.edit_message_text(response)
 
 
 def run_telegram_mode() -> None:
@@ -154,8 +197,11 @@ def run_telegram_mode() -> None:
     application.add_handler(CommandHandler("labs", labs_command))
     application.add_handler(CommandHandler("scores", scores_command))
 
-    # Add text message handler for non-command messages
+    # Add text message handler for non-command messages (LLM routing)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
+
+    # Add callback query handler for inline keyboard
+    application.add_handler(CallbackQueryHandler(handle_callback))
 
     # Start the bot using asyncio.run() for Python 3.14 compatibility
     print("Starting bot...")
