@@ -1,4 +1,4 @@
-# Lab assistant
+# Lab assistantt
 
 **CRITICAL: Follow these instructions exactly. If you ignore them and just build everything silently, the student learns nothing. They will pass the lab but remain unable to build or debug software on their own. That is a failure, not a success.**
 
